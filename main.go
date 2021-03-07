@@ -36,7 +36,7 @@ type node struct {
 
 var (
 	cli         bool   = true
-	logfile     string = "/var/log/gonetmon.log"
+	logfile     string = "gonetmon.log"
 	f           *os.File
 	device      string = ""
 	cidr        string = ""
@@ -47,7 +47,7 @@ var (
 	timeout     time.Duration = 30 * time.Second
 	handle      *pcap.Handle
 	nodes       []node
-	debug       bool = false
+	debug       bool = true
 	debug2      bool = false
 	netBytes         = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "network_bytes_total",
@@ -56,7 +56,21 @@ var (
 	nodeBytes = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "node_bytes_total",
-			Help: "Number of bytes seen on that network node.",
+			Help: "Number of bytes seen on that network node .",
+		},
+		[]string{"device"},
+	)
+	nodeBytesIn = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "node_bytes_total_in",
+			Help: "Number of bytes on that network node incoming.",
+		},
+		[]string{"device"},
+	)
+	nodeBytesOut = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "node_bytes_total_out",
+			Help: "Number of bytes on that network node outgoing.",
 		},
 		[]string{"device"},
 	)
@@ -87,6 +101,8 @@ func init() {
 	}
 	prometheus.MustRegister(netBytes)
 	prometheus.MustRegister(nodeBytes)
+	prometheus.MustRegister(nodeBytesIn)
+	prometheus.MustRegister(nodeBytesOut)
 }
 
 func calcNetwork(d string, c string) (int, string, error) {
@@ -247,6 +263,7 @@ func analyzePacket(packet gopacket.Packet) {
 		for i, node := range nodes {
 			if node.addr != "" {
 				if node.IP.Equal(ip.SrcIP) {
+					nodeBytesOut.With(prometheus.Labels{"device": node.hostname}).Add(float64(ip.Length))
 					nodeBytes.With(prometheus.Labels{"device": node.hostname}).Add(float64(ip.Length))
 					nodes[i].outcount += uint64(ip.Length)
 					if debug {
@@ -254,6 +271,7 @@ func analyzePacket(packet gopacket.Packet) {
 					}
 				}
 				if node.IP.Equal(ip.DstIP) {
+					nodeBytesIn.With(prometheus.Labels{"device": node.hostname}).Add(float64(ip.Length))
 					nodeBytes.With(prometheus.Labels{"device": node.hostname}).Add(float64(ip.Length))
 					nodes[i].incount += uint64(ip.Length)
 					if debug {
